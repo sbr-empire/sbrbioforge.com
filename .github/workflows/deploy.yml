@@ -21,6 +21,4 @@ jobs:
       uses: google-github-actions/deploy-cloudrun@v1
       with:
         service: sbrbioforge
-        region: us-central1 # आपका सर्वर रीजन
-        source: .
-        
+        region: us-central1
