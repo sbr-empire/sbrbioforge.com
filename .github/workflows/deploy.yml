@@ -1,24 +1,88 @@
-name: Deploy to Cloud Run
+name: Deploy All SBR Empire Services in Parallel
 
 on:
   push:
     branches:
-      - main  # जब भी main ब्रांच में कोड आए, काम शुरू हो जाए
+      - main
+
+concurrency:
+  group: deploy-all-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  id-token: write
 
 jobs:
-  deploy:
+  deploy-matrix:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - service: sbrbioforge
+            project_id: sbrbioforge-507319
+            region: us-central1
+            context: .
+          - service: sbrhikmah
+            project_id: sbrhikmah
+            region: us-central1
+            context: .
+          - service: sbrbeautyhub
+            project_id: sbrbeautyhub
+            region: us-central1
+            context: .
+
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v3
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-    - name: Authenticate to Google Cloud
-      uses: google-github-actions/auth@v1
-      with:
-        credentials_json: ${{ secrets.GCP_SA_KEY }} # गूगल क्लाउड की गुप्त चाबी
+      - name: Authenticate to GCP (using service account JSON key)
+        uses: google-github-actions/auth@v1
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
 
-    - name: Deploy to Cloud Run
-      uses: google-github-actions/deploy-cloudrun@v1
-      with:
-        service: sbrbioforge
-        region: us-central1
+      - name: Set up gcloud CLI
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ matrix.project_id }}
+          export_default_credentials: true
+
+      - name: Build and push image using Cloud Build
+        env:
+          IMAGE: gcr.io/${{ matrix.project_id }}/${{ matrix.service }}:${{ github.sha }}
+        run: |
+          # Build from the repository root (context ".") for each service
+          # Images are tagged with the commit SHA to avoid collisions
+          gcloud builds submit "${{ matrix.context }}" \
+            --tag "$IMAGE" \
+            --project="${{ matrix.project_id }}"
+
+      - name: Deploy to Cloud Run with centralized Secret Manager mappings
+        env:
+          IMAGE: gcr.io/${{ matrix.project_id }}/${{ matrix.service }}:${{ github.sha }}
+          SECRET_PROJECT: temporal-ground-507415-b2
+        run: |
+          # Deploy Cloud Run service and map each secret from sbr-core Secret Manager
+          # The secrets must exist in project: ${SECRET_PROJECT} with the exact names below.
+          gcloud run deploy "${{ matrix.service }}" \
+            --image "$IMAGE" \
+            --platform managed \
+            --region "${{ matrix.region }}" \
+            --allow-unauthenticated \
+            --port 8080 \
+            --project="${{ matrix.project_id }}" \
+            --quiet \
+            --set-env-vars "PYTHONUNBUFFERED=1" \
+            --update-secrets "SBR_GOOGLE_KEY_01=projects/${SECRET_PROJECT}/secrets/SBR_GOOGLE_KEY_01:latest" \
+            --update-secrets "SBR_GEMINI_API_KEY_02=projects/${SECRET_PROJECT}/secrets/SBR_GEMINI_API_KEY_02:latest" \
+            --update-secrets "SBR_OPENAI_API_KEY_03=projects/${SECRET_PROJECT}/secrets/SBR_OPENAI_API_KEY_03:latest" \
+            --update-secrets "SBR_CLOUD_API_KEY_04=projects/${SECRET_PROJECT}/secrets/SBR_CLOUD_API_KEY_04:latest" \
+            --update-secrets "SBR_NVIDIA_API_KEY_05=projects/${SECRET_PROJECT}/secrets/SBR_NVIDIA_API_KEY_05:latest" \
+            --update-secrets "SBR_WEATHER_API_KEY_06=projects/${SECRET_PROJECT}/secrets/SBR_WEATHER_API_KEY_06:latest" \
+            --update-secrets "SBR_AMBER_API_KEY_07=projects/${SECRET_PROJECT}/secrets/SBR_AMBER_API_KEY_07:latest" \
+            --update-secrets "SBR_ELEVENLABS_KEY_08=projects/${SECRET_PROJECT}/secrets/SBR_ELEVENLABS_KEY_08:latest" \
+            --update-secrets "SBR_LUMA_API_KEY_09=projects/${SECRET_PROJECT}/secrets/SBR_LUMA_API_KEY_09:latest" \
+            --update-secrets "SBR_GROQ_API_KEY_10=projects/${SECRET_PROJECT}/secrets/SBR_GROQ_API_KEY_10:latest" \
+            --update-secrets "SBR_NASA_API_KEY_11=projects/${SECRET_PROJECT}/secrets/SBR_NASA_API_KEY_11:latest" \
+            --update-secrets "SBR_AIRNOW_API_KEY_12=projects/${SECRET_PROJECT}/secrets/SBR_AIRNOW_API_KEY_12:latest"
+            
