@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import os
-from flask import Flask, send_from_directory, safe_join, make_response
+from flask import Flask, send_from_directory, make_response
+from werkzeug.utils import safe_join
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -36,7 +37,7 @@ def catch_all(path):
     # Security Rule: Path traversal attack se bachne ke liye safe_join
     file_path = safe_join(app.static_folder, path)
     
-    if path and os.path.isfile(file_path):
+    if path and file_path and os.path.isfile(file_path):
         response = make_response(send_from_directory(app.static_folder, path))
         # Static files (JS/CSS) ko browser me cache karne ke liye headers
         response.headers['Cache-Control'] = 'public, max-age=31536000'
@@ -49,9 +50,9 @@ def catch_all(path):
     response.headers['X-Frame-Options'] = 'DENY'
     response.headers['X-Content-Type-Options'] = 'nosniff'
     response.headers['X-XSS-Protection'] = '1; mode=block'
+    response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
     return response
 
 if __name__ == '__main__':
     port = int(os.getenv('PORT', 8080))
     app.run(host='0.0.0.0', port=port)
-  
