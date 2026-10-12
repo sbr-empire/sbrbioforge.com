@@ -21,7 +21,7 @@ steps:
       - 'run'
       - '--filename=.'
       - '--image=gcr.io/$PROJECT_ID/sbrbioforge:$SHORT_SHA'
-      - '--location=us-central1'
+      - '--location=asia-south2'
       - '--output=/workspace/deploy/'
 
 images:
@@ -32,5 +32,5 @@ options:
   logging: CLOUD_LOGGING_ONLY
 
 substitutions:
-  _REGION: 'us-central1'
+  _REGION: 'asia-south2'
   _SERVICE_NAME: 'sbrbioforge'
